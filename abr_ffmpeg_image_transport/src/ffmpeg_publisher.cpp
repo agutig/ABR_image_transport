@@ -432,15 +432,31 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
             RCLCPP_ERROR(logger_, "bitrate_ladder is empty, cannot set selected_bitrate.");
         }
 
+
         //Load from config.json
         std::unordered_map<std::string, std::string> encoderParams;
-        encoderParams["codecName"] = json_config.value("codecName", "libx264");
-        encoderParams["preset"] = json_config.value("codec_preset", "fast");
-        encoderParams["tune"] = "zerolatency";
+        // Retrieve the codec from the JSON or use "libx264" as the default value
+        std::string codecName = json_config.value("codecName", "libx264");
+        encoderParams["codecName"] = codecName;
+
+        // Configure the preset based on the selected codec
+        if (codecName == "h264_nvenc" || codecName == "hevc_nvenc") {
+            encoderParams["preset"] = "ll"; // Enable low latency for NVENC
+            encoderParams.erase("tune");   // Remove the tune option if it exists
+        } else {
+            encoderParams["preset"] = json_config.value("codec_preset", "fast");
+            encoderParams["tune"] = "zerolatency"; // Keep tune only for libx264
+        }
+
+        // Set other parameters
         encoderParams["gopSize"] = std::to_string(json_config.value("gop_size", 3));
-        encoderParams["frame_rate"] = std::to_string(framerate); //Changes both framerate and timebase
+        encoderParams["frame_rate"] = std::to_string(framerate); // Adjust both framerate and timebase
         encoderParams["target_bitrate"] = std::to_string(selected_bitrate);
+
+        // Apply the parameters to the encoder
         encoder_.setParameters(node_, encoderParams);
+
+  
 
         file1.close();
 
@@ -552,6 +568,7 @@ void FFMPEGPublisher::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
           encoder_.closeCodec();
           encoder_.setBitRate(selected_bitrate * 1e6);  
 
+          
           if (!encoder_.openCodec(forced_width, forced_height)) {
               RCLCPP_ERROR_STREAM(logger_, "Failed to reopen codec with new parameters!");
           }

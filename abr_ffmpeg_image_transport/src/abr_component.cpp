@@ -333,12 +333,12 @@ void AbrComponent::analyzeFlow(const ffmpeg_image_transport_msgs::msg::FFMPEGPac
                 publish_msg_(abr_info_msg);  
             }
 
-            /*
+            
             RCLCPP_INFO(
             rclcpp::get_logger("AbrComponent"),
             "Size: %zu bits, Latency: %.6f seconds, instant_bitrate: %.2f  Mbits/s, mean bitrate %.2f Mbits/s, Harmonic Mean: %.2f Mbit/s, Median: %.2f Mbit/s, jitter: %.2f  , ideal_flow: %.2f",
             size, latency, instant_bitrate/ 1e6 ,mean /1e6 , hm/ 1e6 ,median/1e6, jitter, ideal_expected_bitrate/ 1e6 );
-            */
+            
 
             // Call ABR logic
             abr_logic2();
@@ -405,12 +405,17 @@ void AbrComponent::abr_logic2(){
             desired_bitrate=lower_bitrate();
             send_package = true;
 
-        }else if (actual_bitrate > 1.15*ideal_expected_bitrate/1e6)
+        }
+        
+        /*
+        else if (actual_bitrate > 1.15*ideal_expected_bitrate/1e6)
         {
             // If we are at settings well above the maximum, lower (order unnecessary settings above).
             RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Requesting ladders over real max bitrate for this configuration. Keeping in this ladder");
-
-        }else{
+        
+        }*/
+        
+        else{
                         
             if (vote_sum == 0) {
 

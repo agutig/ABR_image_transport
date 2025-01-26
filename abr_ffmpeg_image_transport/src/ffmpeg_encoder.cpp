@@ -63,28 +63,44 @@ static void free_frame(AVFrame ** frame)
   }
 }
 
-void FFMPEGEncoder::closeCodec()
+void FFMPEGEncoder::closeCodec() 
 {
-  if (codecContext_) {
-    avcodec_close(codecContext_);
-    codecContext_ = nullptr;
+  if (!codecContext_) {
+    return;  
   }
+
+  avcodec_flush_buffers(codecContext_);
+
+  avcodec_close(codecContext_);
+
+  if (codecContext_->hw_frames_ctx) {
+    av_buffer_unref(&codecContext_->hw_frames_ctx);
+  }
+
+  avcodec_free_context(&codecContext_); 
+
   free_frame(&frame_);
   free_frame(&hw_frame_);
   free_frame(&wrapperFrame_);
 
   if (packet_) {
-    av_packet_free(&packet_);  // also unreferences the packet
+    av_packet_free(&packet_);
     packet_ = nullptr;
   }
+
   if (hwDeviceContext_) {
     av_buffer_unref(&hwDeviceContext_);
+    hwDeviceContext_ = nullptr;
   }
+
   if (swsContext_) {
     sws_freeContext(swsContext_);
-    swsContext_ = NULL;
+    swsContext_ = nullptr;
   }
+
+  RCLCPP_INFO(logger_, "Encoder closed and resources freed.");
 }
+
 
 AVPixelFormat FFMPEGEncoder::pixelFormat(const std::string & f) const
 {
@@ -100,51 +116,67 @@ AVPixelFormat FFMPEGEncoder::pixelFormat(const std::string & f) const
 
 void FFMPEGEncoder::setParameters(rclcpp::Node * node, const std::unordered_map<std::string, std::string>& params)
 {
-  Lock lock(mutex_);
+    Lock lock(mutex_);
+    const std::string ns = "abr_ffmpeg_image_transport.";
 
-  const std::string ns = "abr_ffmpeg_image_transport.";
+    RCLCPP_INFO(logger_, "Initializing encoder parameters...");
 
-  /* Codec params */
+    /* Codec configuration */
 
-  // codecName_: Specifies the codec library to be used for encoding. 
-  //   - "libx264": Standard H.264 codec, widely supported.
-  //   - "libx265": H.265/HEVC codec, better compression efficiency than H.264.
-  //   - "libvpx": VP8/VP9 codec, often used for WebM containers.
-  codecName_ = get_safe_param<std::string>(node, ns + "encoding", params.at("codecName"));
+    // 1. Set codec name
+    codecName_ = get_safe_param<std::string>(node, ns + "encoding", params.at("codecName"));
+    setCodec(codecName_);
+    RCLCPP_INFO(node->get_logger(), "Codec set to: %s", codecName_.c_str());
 
-  // preset_: Controls the speed of the encoder. Faster presets reduce compression efficiency.
-  //   - "ultrafast": Minimal compression, fastest encoding.
-  //   - "fast", "medium": Balanced trade-off between speed and compression.
-  //   - "veryslow": Maximizes compression efficiency, slowest encoding speed.
-  preset_ = get_safe_param<std::string>(node, ns + "preset", params.at("preset"));
+    // 2. Configure NVENC-specific settings
+    if (codecName_ == "h264_nvenc" ) {
+        std::string defaultPreset = "p1";  // Default to lowest latency preset
+        std::string defaultTune = "ll";   // Low latency tuning
 
-  // tune_: Optimizes encoding for specific scenarios, like minimizing latency or optimizing for grainy content.
-  //   - "film": Enhances quality for standard film content.
-  //   - "animation": Optimized for animated content, preserving details.
-  //   - "grain": Retains film grain, useful for older or grainy content.
-  //   - "zerolatency": Minimizes latency, useful for real-time streaming.
-  tune_ = get_safe_param<std::string>(node, ns + "tune", params.at("tune"));
+        // Use helper functions to set parameters
+        setPreset(get_safe_param<std::string>(node, ns + "preset", defaultPreset));
+        setTune(get_safe_param<std::string>(node, ns + "tune", defaultTune));
+
+        RCLCPP_INFO(
+            logger_,
+            "Using NVENC codec. Applied parameters: preset = %s, tune = %s",
+            preset_.c_str(), tune_.c_str()
+        );
+    } else {
+        // Configure presets and tune for other codecs
+        setPreset(get_safe_param<std::string>(node, ns + "preset", params.at("preset")));
+        setTune(get_safe_param<std::string>(node, ns + "tune", params.at("tune")));
+        RCLCPP_INFO(
+            logger_,
+            "Using codec %s. Applied parameters: preset = %s, tune = %s",
+            codecName_.c_str(), preset_.c_str(), tune_.c_str()
+        );
+
+        pixFormat_ = pixelFormat(get_safe_param<std::string>(node, ns + "pixel_format", ""));
+    }
+
+    // 3. Configure GOP size
+    GOPSize_ = get_safe_param<int64_t>(node, ns + "gop_size", std::stoll(params.at("gopSize")));
+    RCLCPP_INFO(logger_, "GOP size set to: %d", GOPSize_);
+
+    // 4. Configure bitrate
+    int64_t target_bitrate_value = std::stoll(params.at("target_bitrate"));
+    bitRate_ = get_safe_param<int64_t>(node, ns + "bit_rate", target_bitrate_value);
+    RCLCPP_INFO(logger_, "Bitrate set to: %ld", bitRate_);
+
+    // 5. Configure frame rate
+    int framerate = get_safe_param<int>(node, ns + "frame_rate", std::stoll(params.at("frame_rate")));
+    setFrameRate(framerate, 1);
+    RCLCPP_INFO(logger_, "Frame rate set to: %d FPS", framerate);
+
+    // 6. Configure pixel format
 
 
-  // GOPSize_: Defines the number of frames between keyframes (I-frames).
-  //   - A typical value is between 10 and 250 frames, depending on the desired compression and seekability.
-  //   - Smaller GOP sizes result in better seeking performance but larger file sizes.
-  GOPSize_ = get_safe_param<int64_t>(node, ns + "gop_size",std::stoll(params.at("gopSize")));
-
-  int64_t target_bitrate_value = std::stoll(params.at("target_bitrate"));
-
-  bitRate_ = get_safe_param<int64_t>(node, ns + "bit_rate", target_bitrate_value);         // max bitrate
-
-  int framerate = get_safe_param<int>(node, ns + "frame_rate",std::stoll(params.at("frame_rate")));
-
-  setFrameRate(framerate,1);
-
-  /*Others */
-  pixFormat_ = pixelFormat(get_safe_param<std::string>(node, ns + "pixel_format", ""));
-
-  reset();
-  
+    // 7. Reset encoder for the applied configuration
+    reset();
+    RCLCPP_INFO(logger_, "Encoder reset completed with updated parameters.");
 }
+
 
 bool FFMPEGEncoder::initialize(int width, int height, Callback callback)
 {
@@ -164,6 +196,7 @@ bool FFMPEGEncoder::initialize(int width, int height, Callback callback)
 */
 
 
+//Legacy , actually VAAPI doesnt support ABR
 void FFMPEGEncoder::openVAAPIDevice(const AVCodec * codec, int width, int height)
 {
   int err = 0;
@@ -210,6 +243,65 @@ void FFMPEGEncoder::openVAAPIDevice(const AVCodec * codec, int width, int height
     throw(std::runtime_error("vaapi: cannot create buffer ref!"));
   }
 }
+
+
+//Prepares NVENC Hardware
+void FFMPEGEncoder::openNVENCDevice(const AVCodec* codec, int width, int height)
+{
+  int err = 0;
+
+  err = av_hwdevice_ctx_create(&hwDeviceContext_, AV_HWDEVICE_TYPE_CUDA, nullptr, nullptr, 0);
+  if (err < 0) {
+    utils::throw_err("Cannot create CUDA hw device context", err);
+  }
+
+  AVBufferRef* hw_frames_ref = av_hwframe_ctx_alloc(hwDeviceContext_);
+  if (!hw_frames_ref) {
+    throw std::runtime_error("Cannot allocate CUDA hw frame context!");
+  }
+
+  AVHWFramesContext* frames_ctx = reinterpret_cast<AVHWFramesContext*>(hw_frames_ref->data);
+
+  frames_ctx->format = AV_PIX_FMT_CUDA;
+  frames_ctx->sw_format = AV_PIX_FMT_NV12;
+
+  if (pixFormat_ != AV_PIX_FMT_NONE) {
+    RCLCPP_INFO_STREAM(logger_, "User overriding SW pixel format " 
+                                 << utils::pix(frames_ctx->sw_format)
+                                 << " with " << utils::pix(pixFormat_));
+    frames_ctx->sw_format = pixFormat_;
+  } else {
+    RCLCPP_INFO_STREAM(logger_, "Using default SW pixel format: " 
+                                 << utils::pix(frames_ctx->sw_format));
+  }
+
+  frames_ctx->width = width;
+  frames_ctx->height = height;
+  frames_ctx->initial_pool_size = 20;
+
+  err = av_hwframe_ctx_init(hw_frames_ref);
+  if (err < 0) {
+    av_buffer_unref(&hw_frames_ref);
+    utils::throw_err("Failed to initialize CUDA frame context", err);
+  }
+
+  codecContext_->hw_frames_ctx = av_buffer_ref(hw_frames_ref);
+  av_buffer_unref(&hw_frames_ref);
+
+  if (!codecContext_->hw_frames_ctx) {
+    throw std::runtime_error("CUDA: cannot create buffer ref for hw_frames_ctx!");
+  }
+
+  codecContext_->pix_fmt = AV_PIX_FMT_CUDA;
+
+  usesHardwareFrames_ = true;
+
+  RCLCPP_INFO(logger_, "Initialized NVENC device context with CUDA successfully.");
+}
+
+
+
+
 
 /*
    _____ ____  _____  ______ _____ 
@@ -313,17 +405,44 @@ void FFMPEGEncoder::doOpenCodec(int width, int height)
 
   if (codecName_.find("vaapi") != std::string::npos) {
     openVAAPIDevice(codec, width, height);
+  } else if (codecName_.find("nvenc") != std::string::npos) {
+    openNVENCDevice(codec, width, height);
   }
 
-  if (usesHardwareFrames_) {
+
+if (usesHardwareFrames_) {
+    RCLCPP_INFO(
+        logger_, 
+        "Using hardware frames. Accessing AVHWFramesContext..."
+    );
+    
     AVHWFramesContext * frames_ctx =
       reinterpret_cast<AVHWFramesContext *>(codecContext_->hw_frames_ctx->data);
+
     codecContext_->sw_pix_fmt = frames_ctx->sw_format;
     codecContext_->pix_fmt = frames_ctx->format;
-  } else {
+
+    RCLCPP_INFO(
+        logger_,
+        "Hardware frames context initialized: sw_pix_fmt = %s, pix_fmt = %s",
+        utils::pix(codecContext_->sw_pix_fmt).c_str(),
+        utils::pix(codecContext_->pix_fmt).c_str()
+    );
+} else {
+    RCLCPP_INFO(
+        logger_,
+        "Not using hardware frames. Setting preferred pixel format..."
+    );
+
     codecContext_->pix_fmt = utils::get_preferred_pixel_format(codecName_, pixFmts);
     codecContext_->sw_pix_fmt = codecContext_->pix_fmt;
-  }
+
+    RCLCPP_INFO(
+        logger_,
+        "Software frames context initialized: pix_fmt = %s",
+        utils::pix(codecContext_->pix_fmt).c_str()
+    );
+}
 
   /*
   ******************************************************************************************
