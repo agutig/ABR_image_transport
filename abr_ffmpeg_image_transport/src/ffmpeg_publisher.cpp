@@ -78,7 +78,7 @@ rmw_qos_profile_t FFMPEGPublisher::initialize(rclcpp::Node * node, rmw_qos_profi
   Load json posible resolutions resolutions
   */
   std::filesystem::path source_dir = std::filesystem::path(__FILE__).parent_path().parent_path();
-  std::filesystem::path file_path = source_dir / "resolution_configurations.json";
+  std::filesystem::path file_path = source_dir / "config.json";
   std::ifstream file1(file_path);
   
   if (!file1.is_open()) {
@@ -87,33 +87,31 @@ rmw_qos_profile_t FFMPEGPublisher::initialize(rclcpp::Node * node, rmw_qos_profi
   nlohmann::json json_config;
   file1 >> json_config;
 
-  for (const auto& [key, value] : json_config.items()) {
+  for (const auto& [key, value] : json_config["resolution_configurations"].items()) {
       int width = value["width"];
       int height = value["height"];
       resolution_map_[key] = {width, height};
   }
 
-
   /*
-  Load json bitladder
+  file_path = source_dir / "bitrate_ladder.json";
+
+  std::cout << "Path: " << file_path << "\n";
+  std::ifstream file2(file_path);
+  if (!file2.is_open()) {
+      std::cerr << "Couldnt open json file" << std::endl;
+  }
+  json configurations;
+  file2 >> configurations;
+  file2.close();
+
   */
 
-    file_path = source_dir / "bitrate_ladder.json";
+  for (const auto& value : json_config["bitrate_ladder"]) {
+      bitrate_ladder.push_back(value.get<double>());
+  }
 
-    std::cout << "Path: " << file_path << "\n";
-    std::ifstream file2(file_path);
-    if (!file2.is_open()) {
-        std::cerr << "Couldnt open json file" << std::endl;
-    }
-    json configurations;
-    file2 >> configurations;
-    file2.close();
-
-    for (const auto& value : configurations) {
-        bitrate_ladder.push_back(value.get<double>());
-    }
-
-
+  file1.close();
   /*
   Initialize ABR communication and configure QoS for info channel
   */
@@ -399,7 +397,6 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
         std::string resolution = identifyResolution(msg.width, msg.height);
 
         std::filesystem::path source_dir = std::filesystem::path(__FILE__).parent_path().parent_path();
-
         std::filesystem::path file_path = source_dir / "config.json";
         std::ifstream file1(file_path);
         if (!file1.is_open()) {
@@ -433,28 +430,8 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
         }
 
 
-        //Load from config.json
-        std::unordered_map<std::string, std::string> encoderParams;
-        // Retrieve the codec from the JSON or use "libx264" as the default value
-        std::string codecName = json_config.value("codecName", "libx264");
-        encoderParams["codecName"] = codecName;
-
-        // Configure the preset based on the selected codec
-        if (codecName == "h264_nvenc" || codecName == "hevc_nvenc") {
-            encoderParams["preset"] = "ll"; // Enable low latency for NVENC
-            encoderParams.erase("tune");   // Remove the tune option if it exists
-        } else {
-            encoderParams["preset"] = json_config.value("codec_preset", "fast");
-            encoderParams["tune"] = "zerolatency"; // Keep tune only for libx264
-        }
-
-        // Set other parameters
-        encoderParams["gopSize"] = std::to_string(json_config.value("gop_size", 3));
-        encoderParams["frame_rate"] = std::to_string(framerate); // Adjust both framerate and timebase
-        encoderParams["target_bitrate"] = std::to_string(selected_bitrate);
-
         // Apply the parameters to the encoder
-        encoder_.setParameters(node_, encoderParams);
+        encoder_.setParameters(node_, json_config, framerate,selected_bitrate );
 
   
 

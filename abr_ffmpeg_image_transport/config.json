@@ -1,11 +1,20 @@
 {
-    "gop_size": 0,
     "codecName": "libx264",
-    "target_framerate":24,
+
+    "libx264_options" :{
+        "codec_preset":"medium"
+    },
+
+    "h264_nvenc_options" :{
+        "codec_preset":"p1",
+        "codec_tune": "ll"
+    },
+
+    "gop_size": 0,
+    "target_framerate":10,
     "abr_k_factor":1,
     "abr_bitrate_time_window":0.5,
     "abr_stability_recover_time":1,
-    "codec_preset":"medium",
     "abr_stability_threshold":0.3,
     "abr_similarity_threshold":0.95,
     "abr_emergency_latency_threshold": 0.5,
@@ -13,5 +22,36 @@
     "ripple_order":4,
     "csv":false,
     "republish_data":false,
-    "max_rate_mbps":15
+    "max_rate_mbps":15,
+
+    "resolution_configurations":{   
+        "VGA": {"width": 640, "height": 480},
+        "SVGA": {"width": 800, "height": 600},
+        "525SD": {"width": 720, "height": 480},
+        "HD": {"width": 1280, "height": 720},
+        "FHD": {"width": 1920, "height": 1080},
+        "4K": {"width": 3840, "height": 2160},
+        "8K": {"width": 7680, "height": 4320}
+    },
+
+    "bitrate_ladder":[
+        0.5,
+        1.0,
+        2.0,
+        4.0,
+        6.0,
+        8.0,
+        10.0,
+        12.5,
+        15.0,
+        17.0,
+        20.0,
+        22.5,
+        25.0,
+        27.5,
+        30.0,
+        32.5,
+        35.0
+    ]
+    
 }

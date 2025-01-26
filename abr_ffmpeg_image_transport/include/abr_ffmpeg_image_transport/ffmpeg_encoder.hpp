@@ -117,7 +117,7 @@ public:
   }
   bool initialize(int width, int height, Callback callback);
   void setLogger(rclcpp::Logger logger) { logger_ = logger; }
-  void setParameters(rclcpp::Node * node, const std::unordered_map<std::string, std::string>& params);
+  void setParameters(rclcpp::Node * node, const nlohmann::json &json_config ,int framerate,int64_t selected_bitrate );
   void reset();
   // encode image
   void encodeImageMat(const cv::Mat & img, const Header & header, const rclcpp::Time & t0);
@@ -149,6 +149,7 @@ private:
   int drainPacket(const Header & hdr, int width, int height);
   AVPixelFormat pixelFormat(const std::string & f) const;
   void openVAAPIDevice(const AVCodec * codec, int width, int height);
+  void openNVENCDevice(const AVCodec * codec, int width, int height);
   void setAVOption(const std::string & field, const std::string & value);
   // --------- variables
   rclcpp::Logger logger_;

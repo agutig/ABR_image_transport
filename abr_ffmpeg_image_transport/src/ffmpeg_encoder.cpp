@@ -69,7 +69,10 @@ void FFMPEGEncoder::closeCodec()
     return;  
   }
 
-  avcodec_flush_buffers(codecContext_);
+
+  if (codecName_ == "h264_nvenc"){
+    avcodec_flush_buffers(codecContext_);
+  }
 
   avcodec_close(codecContext_);
 
@@ -114,28 +117,34 @@ AVPixelFormat FFMPEGEncoder::pixelFormat(const std::string & f) const
   return (fmt);
 }
 
-void FFMPEGEncoder::setParameters(rclcpp::Node * node, const std::unordered_map<std::string, std::string>& params)
+void FFMPEGEncoder::setParameters(
+    rclcpp::Node* node, 
+    const nlohmann::json &json_config,
+    int framerate,              
+    int64_t selected_bitrate     
+)
 {
     Lock lock(mutex_);
     const std::string ns = "abr_ffmpeg_image_transport.";
 
     RCLCPP_INFO(logger_, "Initializing encoder parameters...");
 
-    /* Codec configuration */
-
-    // 1. Set codec name
-    codecName_ = get_safe_param<std::string>(node, ns + "encoding", params.at("codecName"));
+    /* 1. Codec configuration */
+    codecName_ = get_safe_param<std::string>(
+                     node, 
+                     ns + "encoding", 
+                     json_config.value("codecName", std::string("libx264"))
+                 );
     setCodec(codecName_);
     RCLCPP_INFO(node->get_logger(), "Codec set to: %s", codecName_.c_str());
 
-    // 2. Configure NVENC-specific settings
+    /* 2. Configure NVENC-specific settings o libx264 */
     if (codecName_ == "h264_nvenc" ) {
-        std::string defaultPreset = "p1";  // Default to lowest latency preset
-        std::string defaultTune = "ll";   // Low latency tuning
 
-        // Use helper functions to set parameters
-        setPreset(get_safe_param<std::string>(node, ns + "preset", defaultPreset));
-        setTune(get_safe_param<std::string>(node, ns + "tune", defaultTune));
+        std::string presetFromJson = json_config["h264_nvenc_options"].value("codec_preset", "p1");
+        std::string tuneFromJson   = json_config["h264_nvenc_options"].value("codec_tune",   "ll");
+        setPreset(get_safe_param<std::string>(node, ns + "preset", presetFromJson));
+        setTune(get_safe_param<std::string>(node, ns + "tune",   tuneFromJson));
 
         RCLCPP_INFO(
             logger_,
@@ -143,40 +152,42 @@ void FFMPEGEncoder::setParameters(rclcpp::Node * node, const std::unordered_map<
             preset_.c_str(), tune_.c_str()
         );
     } else {
-        // Configure presets and tune for other codecs
-        setPreset(get_safe_param<std::string>(node, ns + "preset", params.at("preset")));
-        setTune(get_safe_param<std::string>(node, ns + "tune", params.at("tune")));
+
+        std::string presetFromJson = json_config["libx264_options"].value("codec_preset", "fast");
+        std::string tuneFromJson   = "zerolatency";  
+        setPreset(get_safe_param<std::string>(node, ns + "preset", presetFromJson));
+        setTune(get_safe_param<std::string>(node, ns + "tune",   tuneFromJson));
+
         RCLCPP_INFO(
             logger_,
             "Using codec %s. Applied parameters: preset = %s, tune = %s",
             codecName_.c_str(), preset_.c_str(), tune_.c_str()
         );
 
-        pixFormat_ = pixelFormat(get_safe_param<std::string>(node, ns + "pixel_format", ""));
+        pixFormat_ = pixelFormat(
+            get_safe_param<std::string>(node, ns + "pixel_format", "")
+        );
     }
 
-    // 3. Configure GOP size
-    GOPSize_ = get_safe_param<int64_t>(node, ns + "gop_size", std::stoll(params.at("gopSize")));
-    RCLCPP_INFO(logger_, "GOP size set to: %d", GOPSize_);
+    /* 3. Configure GOP size */
+    int64_t gopSizeFromJson = json_config.value("gop_size", static_cast<int64_t>(0));
+    GOPSize_ = get_safe_param<int64_t>(node, ns + "gop_size", gopSizeFromJson);
+  
+    /* 4. Configure bitrate */
 
-    // 4. Configure bitrate
-    int64_t target_bitrate_value = std::stoll(params.at("target_bitrate"));
-    bitRate_ = get_safe_param<int64_t>(node, ns + "bit_rate", target_bitrate_value);
-    RCLCPP_INFO(logger_, "Bitrate set to: %ld", bitRate_);
-
-    // 5. Configure frame rate
-    int framerate = get_safe_param<int>(node, ns + "frame_rate", std::stoll(params.at("frame_rate")));
-    setFrameRate(framerate, 1);
-    RCLCPP_INFO(logger_, "Frame rate set to: %d FPS", framerate);
-
-    // 6. Configure pixel format
+    bitRate_ = get_safe_param<int64_t>(node, ns + "bit_rate", selected_bitrate);
 
 
-    // 7. Reset encoder for the applied configuration
+    /* 5. Configure frame rate */
+
+    int usedFrameRate = get_safe_param<int>(node, ns + "frame_rate", framerate);
+    setFrameRate(usedFrameRate, 1);
+    RCLCPP_INFO(logger_, "Frame rate set to: %d FPS", usedFrameRate);
+
+    /* 7. Reset encoder for the applied configuration */
     reset();
     RCLCPP_INFO(logger_, "Encoder reset completed with updated parameters.");
 }
-
 
 bool FFMPEGEncoder::initialize(int width, int height, Callback callback)
 {
