@@ -17,7 +17,7 @@
     "abr_stability_recover_time":1,
     "abr_stability_threshold":0.3,
     "abr_similarity_threshold":0.95,
-    "abr_emergency_latency_threshold": 0.5,
+    "abr_emergency_latency_threshold": 10000000,
     "predictor":"hm",
     "ripple_order":4,
     "csv":false,
