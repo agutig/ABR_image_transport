@@ -149,7 +149,7 @@ private:
   int drainPacket(const Header & hdr, int width, int height);
   AVPixelFormat pixelFormat(const std::string & f) const;
   void openVAAPIDevice(const AVCodec * codec, int width, int height);
-  void openNVENCDevice(const AVCodec * codec, int width, int height);
+  void openNVENCDevice(int width, int height);
   void setAVOption(const std::string & field, const std::string & value);
   // --------- variables
   rclcpp::Logger logger_;

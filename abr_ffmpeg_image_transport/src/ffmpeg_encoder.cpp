@@ -257,7 +257,7 @@ void FFMPEGEncoder::openVAAPIDevice(const AVCodec * codec, int width, int height
 
 
 //Prepares NVENC Hardware
-void FFMPEGEncoder::openNVENCDevice(const AVCodec* codec, int width, int height)
+void FFMPEGEncoder::openNVENCDevice(int width, int height)
 {
   int err = 0;
 
@@ -417,7 +417,7 @@ void FFMPEGEncoder::doOpenCodec(int width, int height)
   if (codecName_.find("vaapi") != std::string::npos) {
     openVAAPIDevice(codec, width, height);
   } else if (codecName_.find("nvenc") != std::string::npos) {
-    openNVENCDevice(codec, width, height);
+    openNVENCDevice(width, height);
   }
 
 
