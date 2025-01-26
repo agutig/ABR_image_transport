@@ -198,7 +198,6 @@ void AbrComponent::analyzeFlow(const ffmpeg_image_transport_msgs::msg::FFMPEGPac
     // Check if latency exceeds the emergency threshold and activate emergency mode if needed
     if (latency > getEmergencyTresh()) {
         activateEmergencyMode();
-        emergency_mode = true;
         RCLCPP_DEBUG(node_->get_logger(), "Emergency mode activated");
     } 
 
@@ -635,22 +634,26 @@ void AbrComponent::activateEmergencyMode() {
     // Log the lowest bitrate found
     RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Lowest bitrate found: %f", lowest_bitrate);
 
-    // Prepare an ABRInfoPacket to request the lowest bitrate
-    ffmpeg_image_transport_msgs::msg::ABRInfoPacket abr_info_msg;
-    abr_info_msg.role = "client";
-    abr_info_msg.msg_type = 1;
+    if (!emergency_mode){
 
-    // Create JSON with the desired bitrate
-    json msg_json = {{"desired_bitrate", lowest_bitrate}};
-    abr_info_msg.msg_json = msg_json.dump();
+        // Prepare an ABRInfoPacket to request the lowest bitrate
+        ffmpeg_image_transport_msgs::msg::ABRInfoPacket abr_info_msg;
+        abr_info_msg.role = "client";
+        abr_info_msg.msg_type = 1;
 
-    // Publish the emergency bitrate request message
-    publish_msg_(abr_info_msg);
+        // Create JSON with the desired bitrate
+        json msg_json = {{"desired_bitrate", lowest_bitrate}};
+        abr_info_msg.msg_json = msg_json.dump();
 
-    RCLCPP_WARN(
-        rclcpp::get_logger("AbrComponent"),
-        "Emergency mode activated: requesting lowest bitrate %f Bit/s", lowest_bitrate
-    );
+        // Publish the emergency bitrate request message
+        publish_msg_(abr_info_msg);
+
+        RCLCPP_WARN(
+            rclcpp::get_logger("AbrComponent"),
+            "Emergency mode activated: requesting lowest bitrate %f Bit/s", lowest_bitrate
+        );
+        emergency_mode = true;
+    }
 }
 
 
