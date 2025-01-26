@@ -123,7 +123,6 @@ public:
   void encodeImageMat(const cv::Mat & img, const Header & header, const rclcpp::Time & t0);
   void encodeImage(const Image & msg ,int forced_width, int forced_height);
   // ------- performance statistics
-  void printTimers(const std::string & prefix) const;
   void resetTimers();
 
 

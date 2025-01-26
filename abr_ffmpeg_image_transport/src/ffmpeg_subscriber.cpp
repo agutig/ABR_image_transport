@@ -254,7 +254,7 @@ void FFMPEGSubscriber::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
       if (json_msg["available"].get<bool>()) {
 
         //Positive confirmation of the publisher
-        RCLCPP_INFO(logger_, "Handshake finished successfully");
+        RCLCPP_DEBUG(logger_, "Handshake finished successfully");
 
         //Obtain the bitrate ladder and map it.
         std::string bitrate_ladder_string = json_msg["bitrate_ladder"];
@@ -271,7 +271,7 @@ void FFMPEGSubscriber::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
         framerate = json_msg.value("framerate", abr_component_.getfps());
         abr_component_.setfps(framerate);
       
-        RCLCPP_INFO(logger_, "Desired width: %d, Desired height: %d and desired framerate: %d", desired_width, desired_height, framerate);
+        RCLCPP_DEBUG(logger_, "Desired width: %d, Desired height: %d and desired framerate: %d", desired_width, desired_height, framerate);
 
         /*
         Load params from config file
@@ -286,6 +286,22 @@ void FFMPEGSubscriber::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
 
         json json_config;
         file1 >> json_config;
+
+        if (json_config.contains("verbose") && json_config["verbose"].is_boolean() && json_config["verbose"]) {
+            rcutils_ret_t ret = rcutils_logging_set_logger_level(logger_.get_name(), RCUTILS_LOG_SEVERITY_DEBUG);
+            if (ret != RCUTILS_RET_OK) {
+                RCLCPP_WARN(logger_, "Failed to set logger level to DEBUG!");
+            } else {
+                RCLCPP_DEBUG(logger_, "Activated DEBUG mode");
+            }
+        } else {
+            rcutils_ret_t ret = rcutils_logging_set_logger_level(logger_.get_name(), RCUTILS_LOG_SEVERITY_INFO);
+            if (ret != RCUTILS_RET_OK) {
+                RCLCPP_WARN(logger_, "Failed to set logger level to INFO!");
+            }
+        }
+
+
         abr_component_.setKFactor(json_config.value("abr_k_factor", abr_component_.getKFactor()));
 
         abr_component_.setBitrateTimeWindow(json_config.value("abr_bitrate_time_window", abr_component_.getBitrateTimeWindow()));
@@ -324,10 +340,10 @@ void FFMPEGSubscriber::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
         if (!bitrate_ladder.empty()) {
             abr_component_.bitrate_ladder = bitrate_ladder;
             double min_bitrate = *std::min_element(bitrate_ladder.begin(), bitrate_ladder.end());
-            RCLCPP_INFO(logger_, "Minimum bitrate found by min_element: %f", min_bitrate);
+            RCLCPP_DEBUG(logger_, "Minimum bitrate found by min_element: %f", min_bitrate);
             
             abr_component_.actual_bitrate = min_bitrate;
-            RCLCPP_INFO(logger_, "Assigned minimum bitrate to actual_bitrate: %f", abr_component_.actual_bitrate);
+            RCLCPP_DEBUG(logger_, "Assigned minimum bitrate to actual_bitrate: %f", abr_component_.actual_bitrate);
         } else {
             RCLCPP_ERROR(logger_, "bitrate_ladder is empty, cannot set actual_bitrate.");
         }
@@ -365,7 +381,7 @@ void FFMPEGSubscriber::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
         abr_component_.actual_bitrate = selected_bitrate;  // Almacena como `double`
         
 
-        RCLCPP_INFO(logger_, "Bitrate confirmed and updated: %f", selected_bitrate);
+        RCLCPP_DEBUG(logger_, "Bitrate confirmed and updated: %f", selected_bitrate);
 
         allow_transmition_ = true;
 
@@ -382,10 +398,10 @@ void FFMPEGSubscriber::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
       }
 
     } else if (msg->msg_type == 2) {
-      RCLCPP_INFO(logger_, "TODO");
+      RCLCPP_DEBUG(logger_, "TODO");
 
     } else {
-      RCLCPP_INFO(logger_, "Wrong message type, ignoring msg");
+      RCLCPP_DEBUG(logger_, "Wrong message type, ignoring msg");
     }
   }
 }

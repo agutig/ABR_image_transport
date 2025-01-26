@@ -101,7 +101,7 @@ void FFMPEGEncoder::closeCodec()
     swsContext_ = nullptr;
   }
 
-  RCLCPP_INFO(logger_, "Encoder closed and resources freed.");
+  RCLCPP_DEBUG(logger_, "Encoder closed and resources freed.");
 }
 
 
@@ -127,7 +127,7 @@ void FFMPEGEncoder::setParameters(
     Lock lock(mutex_);
     const std::string ns = "abr_ffmpeg_image_transport.";
 
-    RCLCPP_INFO(logger_, "Initializing encoder parameters...");
+    RCLCPP_DEBUG(logger_, "Initializing encoder parameters...");
 
     /* 1. Codec configuration */
     codecName_ = get_safe_param<std::string>(
@@ -136,7 +136,7 @@ void FFMPEGEncoder::setParameters(
                      json_config.value("codecName", std::string("libx264"))
                  );
     setCodec(codecName_);
-    RCLCPP_INFO(node->get_logger(), "Codec set to: %s", codecName_.c_str());
+    RCLCPP_DEBUG(node->get_logger(), "Codec set to: %s", codecName_.c_str());
 
     /* 2. Configure NVENC-specific settings o libx264 */
     if (codecName_ == "h264_nvenc" ) {
@@ -146,7 +146,7 @@ void FFMPEGEncoder::setParameters(
         setPreset(get_safe_param<std::string>(node, ns + "preset", presetFromJson));
         setTune(get_safe_param<std::string>(node, ns + "tune",   tuneFromJson));
 
-        RCLCPP_INFO(
+        RCLCPP_DEBUG(
             logger_,
             "Using NVENC codec. Applied parameters: preset = %s, tune = %s",
             preset_.c_str(), tune_.c_str()
@@ -158,7 +158,7 @@ void FFMPEGEncoder::setParameters(
         setPreset(get_safe_param<std::string>(node, ns + "preset", presetFromJson));
         setTune(get_safe_param<std::string>(node, ns + "tune",   tuneFromJson));
 
-        RCLCPP_INFO(
+        RCLCPP_DEBUG(
             logger_,
             "Using codec %s. Applied parameters: preset = %s, tune = %s",
             codecName_.c_str(), preset_.c_str(), tune_.c_str()
@@ -182,11 +182,11 @@ void FFMPEGEncoder::setParameters(
 
     int usedFrameRate = get_safe_param<int>(node, ns + "frame_rate", framerate);
     setFrameRate(usedFrameRate, 1);
-    RCLCPP_INFO(logger_, "Frame rate set to: %d FPS", usedFrameRate);
+    RCLCPP_DEBUG(logger_, "Frame rate set to: %d FPS", usedFrameRate);
 
     /* 7. Reset encoder for the applied configuration */
     reset();
-    RCLCPP_INFO(logger_, "Encoder reset completed with updated parameters.");
+    RCLCPP_DEBUG(logger_, "Encoder reset completed with updated parameters.");
 }
 
 bool FFMPEGEncoder::initialize(int width, int height, Callback callback)
@@ -225,13 +225,19 @@ void FFMPEGEncoder::openVAAPIDevice(const AVCodec * codec, int width, int height
     const auto fmts = utils::get_hwframe_transfer_formats(hw_frames_ref);
     frames_ctx->sw_format = utils::get_preferred_pixel_format("h264_vaapi", fmts);
     if (pixFormat_ != AV_PIX_FMT_NONE) {
-      RCLCPP_INFO_STREAM(
-        logger_, "user overriding software pix fmt " << utils::pix(frames_ctx->sw_format));
-      RCLCPP_INFO_STREAM(logger_, "with " << utils::pix(pixFormat_));
-      frames_ctx->sw_format = pixFormat_;  // override default at your own risk!
+        RCLCPP_DEBUG(
+            logger_, 
+            "User overriding software pixel format %s with %s", 
+            utils::pix(frames_ctx->sw_format).c_str(), 
+            utils::pix(pixFormat_).c_str()
+        );
+        frames_ctx->sw_format = pixFormat_;  // override default at your own risk!
     } else {
-      RCLCPP_INFO_STREAM(
-        logger_, "using software pixel format: " << utils::pix(frames_ctx->sw_format));
+        RCLCPP_DEBUG(
+            logger_, 
+            "Using software pixel format: %s", 
+            utils::pix(frames_ctx->sw_format).c_str()
+        );
     }
     if (frames_ctx->sw_format == AV_PIX_FMT_NONE) {
       av_buffer_unref(&hw_frames_ref);
@@ -277,13 +283,14 @@ void FFMPEGEncoder::openNVENCDevice(int width, int height)
   frames_ctx->sw_format = AV_PIX_FMT_NV12;
 
   if (pixFormat_ != AV_PIX_FMT_NONE) {
-    RCLCPP_INFO_STREAM(logger_, "User overriding SW pixel format " 
-                                 << utils::pix(frames_ctx->sw_format)
-                                 << " with " << utils::pix(pixFormat_));
+    RCLCPP_DEBUG(logger_, "User overriding SW pixel format %s with %s", 
+                utils::pix(frames_ctx->sw_format).c_str(), 
+                utils::pix(pixFormat_).c_str());
+
     frames_ctx->sw_format = pixFormat_;
   } else {
-    RCLCPP_INFO_STREAM(logger_, "Using default SW pixel format: " 
-                                 << utils::pix(frames_ctx->sw_format));
+    RCLCPP_DEBUG(logger_, "Using default SW pixel format: %s", utils::pix(frames_ctx->sw_format).c_str());
+
   }
 
   frames_ctx->width = width;
@@ -307,7 +314,7 @@ void FFMPEGEncoder::openNVENCDevice(int width, int height)
 
   usesHardwareFrames_ = true;
 
-  RCLCPP_INFO(logger_, "Initialized NVENC device context with CUDA successfully.");
+  RCLCPP_DEBUG(logger_, "Initialized NVENC device context with CUDA successfully.");
 }
 
 
@@ -422,7 +429,7 @@ void FFMPEGEncoder::doOpenCodec(int width, int height)
 
 
 if (usesHardwareFrames_) {
-    RCLCPP_INFO(
+    RCLCPP_DEBUG(
         logger_, 
         "Using hardware frames. Accessing AVHWFramesContext..."
     );
@@ -433,14 +440,14 @@ if (usesHardwareFrames_) {
     codecContext_->sw_pix_fmt = frames_ctx->sw_format;
     codecContext_->pix_fmt = frames_ctx->format;
 
-    RCLCPP_INFO(
+    RCLCPP_DEBUG(
         logger_,
         "Hardware frames context initialized: sw_pix_fmt = %s, pix_fmt = %s",
         utils::pix(codecContext_->sw_pix_fmt).c_str(),
         utils::pix(codecContext_->pix_fmt).c_str()
     );
 } else {
-    RCLCPP_INFO(
+    RCLCPP_DEBUG(
         logger_,
         "Not using hardware frames. Setting preferred pixel format..."
     );
@@ -448,7 +455,7 @@ if (usesHardwareFrames_) {
     codecContext_->pix_fmt = utils::get_preferred_pixel_format(codecName_, pixFmts);
     codecContext_->sw_pix_fmt = codecContext_->pix_fmt;
 
-    RCLCPP_INFO(
+    RCLCPP_DEBUG(
         logger_,
         "Software frames context initialized: pix_fmt = %s",
         utils::pix(codecContext_->pix_fmt).c_str()
@@ -702,16 +709,8 @@ int FFMPEGEncoder::drainPacket(const Header & header, int width, int height)
                                             
 */
 
-void FFMPEGEncoder::printTimers(const std::string & prefix) const
-{
-  Lock lock(mutex_);
-  RCLCPP_INFO_STREAM(
-    logger_, prefix << " pktsz: " << totalOutBytes_ / frameCnt_ << " compr: "
-                    << totalInBytes_ / (double)totalOutBytes_ << " debay: " << tdiffDebayer_
-                    << " fmcp: " << tdiffFrameCopy_ << " send: " << tdiffSendFrame_
-                    << " recv: " << tdiffReceivePacket_ << " cout: " << tdiffCopyOut_
-                    << " publ: " << tdiffPublish_ << " tot: " << tdiffTotal_);
-}
+
+
 void FFMPEGEncoder::resetTimers()
 {
   Lock lock(mutex_);

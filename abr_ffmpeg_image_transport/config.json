@@ -23,6 +23,7 @@
     "csv":false,
     "republish_data":false,
     "max_rate_mbps":15,
+    "verbose": true,
 
     "resolution_configurations":{   
         "VGA": {"width": 640, "height": 480},

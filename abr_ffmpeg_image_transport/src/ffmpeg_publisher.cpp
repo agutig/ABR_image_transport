@@ -87,25 +87,26 @@ rmw_qos_profile_t FFMPEGPublisher::initialize(rclcpp::Node * node, rmw_qos_profi
   nlohmann::json json_config;
   file1 >> json_config;
 
+  if (json_config.contains("verbose") && json_config["verbose"].is_boolean() && json_config["verbose"]) {
+      rcutils_ret_t ret = rcutils_logging_set_logger_level(logger_.get_name(), RCUTILS_LOG_SEVERITY_DEBUG);
+      if (ret != RCUTILS_RET_OK) {
+          RCLCPP_WARN(logger_, "Failed to set logger level to DEBUG!");
+      } else {
+          RCLCPP_DEBUG(logger_, "Activated DEBUG mode");
+      }
+  } else {
+      rcutils_ret_t ret = rcutils_logging_set_logger_level(logger_.get_name(), RCUTILS_LOG_SEVERITY_INFO);
+      if (ret != RCUTILS_RET_OK) {
+          RCLCPP_WARN(logger_, "Failed to set logger level to INFO!");
+      }
+  }
+
   for (const auto& [key, value] : json_config["resolution_configurations"].items()) {
       int width = value["width"];
       int height = value["height"];
       resolution_map_[key] = {width, height};
   }
 
-  /*
-  file_path = source_dir / "bitrate_ladder.json";
-
-  std::cout << "Path: " << file_path << "\n";
-  std::ifstream file2(file_path);
-  if (!file2.is_open()) {
-      std::cerr << "Couldnt open json file" << std::endl;
-  }
-  json configurations;
-  file2 >> configurations;
-  file2.close();
-
-  */
 
   for (const auto& value : json_config["bitrate_ladder"]) {
       bitrate_ladder.push_back(value.get<double>());
@@ -189,7 +190,7 @@ std::string FFMPEGPublisher::identifyResolution(int width, int height) const {
       }
   }
 
-  RCLCPP_INFO(logger_, "No exact match found, using closest resolution: %s (%d x %d)", 
+  RCLCPP_DEBUG(logger_, "No exact match found, using closest resolution: %s (%d x %d)", 
               best_res_name.c_str(), resolution_map_.at(best_res_name).first, resolution_map_.at(best_res_name).second);
   return best_res_name;
 }
@@ -241,7 +242,7 @@ void FFMPEGPublisher::expectedBitrateLadder(int width, int height, int framerate
 
         double expected_bitrate = static_cast<double>(width) * height * framerate * compression_ratio;
         updated_bitrate_ladder.push_back(expected_bitrate);
-        RCLCPP_INFO(logger_, "Calculated expected bitrate: %f with compression factor: %f", expected_bitrate, compression_ratio);
+        RCLCPP_DEBUG(logger_, "Calculated expected bitrate: %f with compression factor: %f", expected_bitrate, compression_ratio);
     }
 
     bitrate_ladder = std::move(updated_bitrate_ladder);
@@ -255,9 +256,9 @@ void FFMPEGPublisher::filterBitrateLadder(double max_rate_mbps) const {
         bitrate_ladder.end()
     );
 
-    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Filtered bitrate ladder:");
+    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Filtered bitrate ladder:");
     for (const auto& bitrate : bitrate_ladder) {
-        RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "%f Mbps", bitrate);
+        RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "%f Mbps", bitrate);
     }
 }
 
@@ -309,7 +310,6 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
 
     if (measurePerformance_) {
       if (static_cast<int>(++frameCounter_) > performanceInterval_) {
-        encoder_.printTimers(logger_.get_name());
         encoder_.resetTimers();
         frameCounter_ = 0;
       }
@@ -336,11 +336,11 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
         if (json_config["target_framerate"].is_number()) {
 
           framerate = json_config["target_framerate"].get<int>();
-          RCLCPP_INFO(logger_, "Using target framerate from config.json: %f fps", framerate);
+          RCLCPP_DEBUG(logger_, "Using target framerate from config.json: %f fps", framerate);
         } else if (json_config["target_framerate"].is_string() && json_config["target_framerate"] == "") {
 
           // Calculate framerate dynamically
-          RCLCPP_INFO(logger_, "Target framerate is empty, estimating dynamically.");
+          RCLCPP_DEBUG(logger_, "Target framerate is empty, estimating dynamically.");
           static std::vector<int> framerate_values;
           rclcpp::Clock steady_clock(RCL_STEADY_TIME);
           auto current_time = steady_clock.now();
@@ -354,7 +354,7 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
               }
 
               double harmonic_mean_framerate = framerate_values.size() / harmonic_sum;
-              RCLCPP_INFO(logger_, "Harmonic mean framerate over 1 second: %.2f fps", harmonic_mean_framerate);
+              RCLCPP_DEBUG(logger_, "Harmonic mean framerate over 1 second: %.2f fps", harmonic_mean_framerate);
 
               framerate = static_cast<int>(std::floor(harmonic_mean_framerate));
             }
@@ -369,7 +369,7 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
 
             if (new_framerate > 1) {
               framerate_values.push_back(new_framerate);
-              RCLCPP_INFO(logger_, "Calculated framerate: %d fps", new_framerate);
+              RCLCPP_DEBUG(logger_, "Calculated framerate: %d fps", new_framerate);
             } else {
               RCLCPP_WARN(logger_, "Invalid framerate: %d fps (too low)", new_framerate);
             }
@@ -424,7 +424,7 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
         // Find the configuration with the lowest bitrate
         if (!bitrate_ladder.empty()) {
           selected_bitrate = *std::min_element(bitrate_ladder.begin(), bitrate_ladder.end()) *1e6;
-            RCLCPP_INFO(logger_, "Selected bitrate (smallest in list): %d bps", selected_bitrate );
+            RCLCPP_DEBUG(logger_, "Selected bitrate (smallest in list): %d bps", selected_bitrate );
         } else {
             RCLCPP_ERROR(logger_, "bitrate_ladder is empty, cannot set selected_bitrate.");
         }
@@ -440,7 +440,7 @@ void FFMPEGPublisher::publish(const Image & msg, const PublishFn & publish_fn) c
         forced_width = width;
         forced_height = height;
 
-        RCLCPP_INFO(logger_, "Best resolution match found, forced_width: %d, forced_height: %d", 
+        RCLCPP_DEBUG(logger_, "Best resolution match found, forced_width: %d, forced_height: %d", 
             forced_width, forced_height);
 
         ready_to_recive_video = true;
@@ -514,7 +514,7 @@ void FFMPEGPublisher::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
     } else if (msg->msg_type == 1)  // QUALITY_CHANGE: Adjust codec parameters to match requested bitrate
       {
 
-      RCLCPP_INFO(logger_, "Changing the quality");
+      RCLCPP_DEBUG(logger_, "Changing the quality");
 
       json json_msg = json::parse(msg->msg_json);
 
@@ -529,7 +529,7 @@ void FFMPEGPublisher::abrInfoCallback(const ABRInfoPacket::SharedPtr msg) {
           }
           
           double selected_bitrate = *it; 
-          RCLCPP_INFO(logger_, "New configuration ASKED: Bitrate: %f", selected_bitrate);
+          RCLCPP_DEBUG(logger_, "New configuration ASKED: Bitrate: %f", selected_bitrate);
 
           ABRInfoPacket init_msg;
           init_msg.role = "server";

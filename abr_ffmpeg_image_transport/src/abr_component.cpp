@@ -199,7 +199,7 @@ void AbrComponent::analyzeFlow(const ffmpeg_image_transport_msgs::msg::FFMPEGPac
     if (latency > getEmergencyTresh()) {
         activateEmergencyMode();
         emergency_mode = true;
-        RCLCPP_INFO(node_->get_logger(), "Emergency mode activated");
+        RCLCPP_DEBUG(node_->get_logger(), "Emergency mode activated");
     } 
 
     if (allow_transmition_ && (actual_time > getDateRefresh())) {
@@ -334,7 +334,7 @@ void AbrComponent::analyzeFlow(const ffmpeg_image_transport_msgs::msg::FFMPEGPac
             }
 
             
-            RCLCPP_INFO(
+            RCLCPP_DEBUG(
             rclcpp::get_logger("AbrComponent"),
             "Size: %zu bits, Latency: %.6f seconds, instant_bitrate: %.2f  Mbits/s, mean bitrate %.2f Mbits/s, Harmonic Mean: %.2f Mbit/s, Median: %.2f Mbit/s, jitter: %.2f  , ideal_flow: %.2f",
             size, latency, instant_bitrate/ 1e6 ,mean /1e6 , hm/ 1e6 ,median/1e6, jitter, ideal_expected_bitrate/ 1e6 );
@@ -381,14 +381,14 @@ void AbrComponent::abr_logic2(){
         //double stability_threshold = 0.3;
 
         if (difference > compare_bitrate * stability_threshold) {
-            RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Communication unstable, pushing to inestability buffer.");
+            RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Communication unstable, pushing to inestability buffer.");
 
             updateUnestabilityBuffer(true);
  
         }else{
             
             //double similarity_threshold = 0.80;
-            RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Communication stable, action.");
+            RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Communication stable, action.");
 
             updateUnestabilityBuffer(false);
 
@@ -401,19 +401,19 @@ void AbrComponent::abr_logic2(){
         bool strong_unestable_conection = std::count(unestability_buffer_.begin(), unestability_buffer_.end(), true) == 3;
 
         if (strong_unestable_conection){
-            RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Strong unstabilidty: Reducing");
+            RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Strong unstabilidty: Reducing");
             desired_bitrate=lower_bitrate();
             send_package = true;
 
         }
         
-        /*
+        
         else if (actual_bitrate > 1.15*ideal_expected_bitrate/1e6)
         {
             // If we are at settings well above the maximum, lower (order unnecessary settings above).
-            RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Requesting ladders over real max bitrate for this configuration. Keeping in this ladder");
+            RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Requesting ladders over real max bitrate for this configuration. Keeping in this ladder");
         
-        }*/
+        }
         
         else{
                         
@@ -425,7 +425,7 @@ void AbrComponent::abr_logic2(){
                 //ripple contidion
                 bool ripple = false;
                 if (previous_bitrate == desired_bitrate && previous_bitrate > actual_bitrate){
-                    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Ripple");
+                    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Ripple");
                     ripple = true;
                     
                     ripple_order_count = ripple_order_count+1;
@@ -436,7 +436,7 @@ void AbrComponent::abr_logic2(){
                 }
 
                 if (desired_bitrate != actual_bitrate && ripple == false){
-                    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Reducing bitrate");
+                    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Reducing bitrate");
                     send_package = true;
                 }
             } else if (vote_sum == 2) {
@@ -446,7 +446,7 @@ void AbrComponent::abr_logic2(){
 
                 bool ripple = false;
                 if (previous_bitrate == desired_bitrate && previous_bitrate > actual_bitrate){
-                    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Ripple");
+                    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Ripple");
                     ripple = true;
 
                     ripple_order_count = ripple_order_count+1;
@@ -457,13 +457,13 @@ void AbrComponent::abr_logic2(){
                 }
 
                 if (desired_bitrate != actual_bitrate && ripple == false){
-                    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Increasing bitrate");
+                    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Increasing bitrate");
                     send_package = true;
                 }
 
             } else {
                 // Stable situation, maintain current bitrate
-                RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Stable performance, maintaining current bitrate.");
+                RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Stable performance, maintaining current bitrate.");
                 previous_bitrate = actual_bitrate;
                 ripple_order_count = 0;
             }
@@ -521,7 +521,7 @@ double AbrComponent::increase_bitrate() {
 
     // Check if the desired position exceeds the ladder's size
     if (desired_index >= static_cast<int>(bitrate_ladder.size())) {
-        RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "No higher bitrate configurations available.");
+        RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "No higher bitrate configurations available.");
         return actual_bitrate;  // Retorna el bitrate actual si no es posible avanzar
     }
 
@@ -529,7 +529,7 @@ double AbrComponent::increase_bitrate() {
     double desired_bitrate = bitrate_ladder[desired_index];
 
     // Log the new bitrate to which the increase occurred
-    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "New desired bitrate: %f", desired_bitrate);
+    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "New desired bitrate: %f", desired_bitrate);
 
     return desired_bitrate;
 }
@@ -553,7 +553,7 @@ double AbrComponent::lower_bitrate() {
 
     // Check if `it` is at the beginning or if `actual_bitrate` is less than the first entry in `bitrate_ladder`
     if (it == bitrate_ladder.begin()) {
-        RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "No lower bitrate configurations available for actual_bitrate: %f", actual_bitrate);
+        RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "No lower bitrate configurations available for actual_bitrate: %f", actual_bitrate);
         return actual_bitrate;  // Return current bitrate if no lower option is available
     }
 
@@ -563,7 +563,7 @@ double AbrComponent::lower_bitrate() {
     double desired_bitrate = bitrate_ladder[desired_index];
 
     // Log the adjustment made in bitrate
-    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Lowered bitrate from %f to %f", actual_bitrate, desired_bitrate);
+    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Lowered bitrate from %f to %f", actual_bitrate, desired_bitrate);
 
     return desired_bitrate;
 }
@@ -605,7 +605,7 @@ void AbrComponent::updateUnestabilityBuffer(bool isUnstable) {
         buffer_visual = buffer_visual.substr(0, buffer_visual.size() - 1) + "]";
 
         int true_count = std::count(unestability_buffer_.begin(), unestability_buffer_.end(), true);
-        RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Unestability Buffer Status: %s (Total: %d)", buffer_visual.c_str(), true_count);
+        RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Unestability Buffer Status: %s (Total: %d)", buffer_visual.c_str(), true_count);
 }
 
 
@@ -633,7 +633,7 @@ void AbrComponent::activateEmergencyMode() {
     double lowest_bitrate = *lowest_bitrate_it;
 
     // Log the lowest bitrate found
-    RCLCPP_INFO(rclcpp::get_logger("AbrComponent"), "Lowest bitrate found: %f", lowest_bitrate);
+    RCLCPP_DEBUG(rclcpp::get_logger("AbrComponent"), "Lowest bitrate found: %f", lowest_bitrate);
 
     // Prepare an ABRInfoPacket to request the lowest bitrate
     ffmpeg_image_transport_msgs::msg::ABRInfoPacket abr_info_msg;

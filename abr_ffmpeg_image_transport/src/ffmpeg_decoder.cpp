@@ -81,7 +81,7 @@ bool FFMPEGDecoder::initialize(
 {
   std::string decoder = dec;
   if (decoder.empty()) {
-    RCLCPP_INFO_STREAM(logger_, "no decoder for encoding: " << msg->encoding);
+    RCLCPP_DEBUG(logger_, "no decoder for encoding: %s", msg->encoding.c_str());
     return (false);
   }
   callback_ = callback;
@@ -104,10 +104,10 @@ static enum AVHWDeviceType get_hw_type(const std::string & name, rclcpp::Logger 
 {
   enum AVHWDeviceType type = av_hwdevice_find_type_by_name(name.c_str());
   if (type == AV_HWDEVICE_TYPE_NONE) {
-    RCLCPP_INFO_STREAM(logger, "hw accel device is not supported: " << name);
-    RCLCPP_INFO_STREAM(logger, "available devices:");
+    RCLCPP_DEBUG(logger, "hw accel device is not supported: %s", name.c_str());
+    RCLCPP_DEBUG(logger, "available devices:");
     while ((type = av_hwdevice_iterate_types(type)) != AV_HWDEVICE_TYPE_NONE)
-      RCLCPP_INFO_STREAM(logger, av_hwdevice_get_type_name(type));
+      RCLCPP_DEBUG(logger, av_hwdevice_get_type_name(type));
     return (type);
   }
   return (type);
@@ -407,10 +407,6 @@ bool FFMPEGDecoder::decodePacket(const FFMPEGPacketConstPtr & msg, int forced_wi
 
 void FFMPEGDecoder::resetTimers() { tdiffTotal_.reset(); }
 
-void FFMPEGDecoder::printTimers(const std::string & prefix) const
-{
-  RCLCPP_INFO_STREAM(logger_, prefix << " total decode: " << tdiffTotal_);
-}
 
 const std::unordered_map<std::string, std::string> & FFMPEGDecoder::getDefaultEncoderToDecoderMap()
 {
